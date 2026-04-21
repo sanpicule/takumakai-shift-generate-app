@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
+  background: #f1f5f9;
+  color: #1e293b;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* カスタムスクロールバー */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* シフトセルのカラー */
+.shift-cell-day {
+  @apply bg-blue-100 text-blue-800 font-semibold;
+}
+.shift-cell-night {
+  @apply bg-pink-100 text-pink-800 font-semibold;
+}
+.shift-cell-off-day {
+  @apply bg-slate-100 text-slate-500;
+}
+.shift-cell-rest {
+  @apply bg-green-100 text-green-800;
+}
+.shift-cell-comp {
+  @apply bg-yellow-100 text-yellow-800;
+}
+.shift-cell-request {
+  @apply bg-purple-100 text-purple-800;
+}
+.shift-cell-empty {
+  @apply bg-white text-slate-300;
+}
+
+/* ドラッグ中 */
+.dragging-over {
+  @apply bg-blue-50 border-blue-300;
+}
+
+/* アニメーション */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* タイトルバー対応（macOS） */
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}

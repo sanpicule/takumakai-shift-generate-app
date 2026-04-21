@@ -1,0 +1,40 @@
+{
+  "name": "shift-scheduler",
+  "version": "1.0.0",
+  "description": "卓麻会 看護師シフト生成アプリ",
+  "main": "./out/main/index.js",
+  "author": "Takumaki-kai",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "build:mac": "npm run build && electron-builder --mac",
+    "build:win": "npm run build && electron-builder --win",
+    "build:all": "npm run build && electron-builder --mac --win"
+  },
+  "dependencies": {
+    "@electron-toolkit/preload": "^3.0.2",
+    "@electron-toolkit/tsconfig": "^2.0.0",
+    "@electron-toolkit/utils": "^4.0.0",
+    "@rollup/rollup-darwin-arm64": "^4.60.2",
+    "clsx": "^2.1.1",
+    "date-fns": "^3.6.0",
+    "electron-store": "^8.2.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.3",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.79",
+    "@types/react-dom": "^18.2.25",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.19",
+    "electron": "^30.5.1",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.1.0",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.3",
+    "typescript": "^5.4.5"
+  }
+}
