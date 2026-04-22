@@ -68,7 +68,8 @@ export interface StaffSummary {
   dayShiftCount: number   // 日勤数
   nightShiftCount: number // 当直数
   sundayRestCount: number // 日曜休み数
-  maxConsecutiveDays: number // 最大連勤数
+  maxConsecutiveDays: number  // 最大連勤数
+  consecutiveRestCount: number // 連休数（2日以上の連続休みブロック数）
 }
 
 // シフト生成結果
@@ -80,6 +81,14 @@ export interface ShiftResult {
   daysInMonth: number
   year: number
   month: number
+}
+
+// スタッフ構成プリセット
+export interface StaffPreset {
+  id: string        // 一意ID（タイムスタンプベース）
+  name: string      // ユーザーが付けた名前
+  staffList: Staff[]
+  createdAt: string // ISO 8601
 }
 
 // アプリ全体の設定・状態

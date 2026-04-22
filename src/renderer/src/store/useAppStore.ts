@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type {
   Staff,
+  StaffPreset,
   StaffRequests,
   PartTimeWorkDays,
   PrevMonthInfo,
@@ -53,6 +54,12 @@ interface AppStore {
   shiftResult: ShiftResult | null
   setShiftResult: (result: ShiftResult | null) => void
 
+  // スタッフ構成プリセット
+  staffPresets: StaffPreset[]
+  savePreset: (name: string) => Promise<void>
+  loadPreset: (id: string) => Promise<void>
+  deletePreset: (id: string) => Promise<void>
+
   // データの永続化
   loadFromStore: () => Promise<void>
   saveToStore: () => Promise<void>
@@ -60,6 +67,7 @@ interface AppStore {
 
 export const useAppStore = create<AppStore>((set, get) => ({
   staffList: DEFAULT_STAFF,
+  staffPresets: [],
   selectedYear: now.getFullYear(),
   selectedMonth: now.getMonth() + 1,
   requests: {},
@@ -124,12 +132,56 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   setShiftResult: (result) => set({ shiftResult: result }),
 
+  savePreset: async (name) => {
+    try {
+      const { staffList, staffPresets } = get()
+      const newPreset: StaffPreset = {
+        id: `preset_${Date.now()}`,
+        name: name.trim(),
+        staffList: [...staffList],
+        createdAt: new Date().toISOString()
+      }
+      const updated = [...staffPresets, newPreset]
+      set({ staffPresets: updated })
+      await window.api.storeSet('staffPresets', updated)
+    } catch {
+      // storeが利用できない場合は無視
+    }
+  },
+
+  loadPreset: async (id) => {
+    try {
+      const { staffPresets } = get()
+      const preset = staffPresets.find((p) => p.id === id)
+      if (!preset) return
+      set({ staffList: preset.staffList })
+      await window.api.storeSet('staffList', preset.staffList)
+    } catch {
+      // storeが利用できない場合は無視
+    }
+  },
+
+  deletePreset: async (id) => {
+    try {
+      const { staffPresets } = get()
+      const updated = staffPresets.filter((p) => p.id !== id)
+      set({ staffPresets: updated })
+      await window.api.storeSet('staffPresets', updated)
+    } catch {
+      // storeが利用できない場合は無視
+    }
+  },
+
   loadFromStore: async () => {
     try {
       const api = window.api
       const staffList = (await api.storeGet('staffList')) as Staff[] | null
       if (staffList && staffList.length > 0) {
         set({ staffList })
+      }
+      const staffPresets = (await api.storeGet('staffPresets')) as StaffPreset[] | null
+      if (staffPresets && staffPresets.length > 0) {
+        set({ staffPresets })
       }
     } catch {
       // storeが利用できない場合はデフォルト値を使用

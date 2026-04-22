@@ -2,6 +2,12 @@ import { useState } from 'react'
 import { useAppStore, WORK_TYPE_LABELS } from '../store/useAppStore'
 import type { Staff, WorkType } from '../types'
 
+// ISO日付文字列を "YYYY/MM/DD" 形式で返す
+function formatDate(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
+}
+
 const WORK_TYPES: WorkType[] = ['日勤専従', '当直専従', '日当両方', '非常勤']
 
 const WORK_TYPE_COLORS: Record<WorkType, string> = {
@@ -122,10 +128,16 @@ function StaffForm({ initial, onSave, onCancel, isNew }: StaffFormProps) {
 }
 
 export default function StaffPage() {
-  const { staffList, addStaff, updateStaff, removeStaff, saveToStore } = useAppStore()
+  const {
+    staffList, addStaff, updateStaff, removeStaff, saveToStore,
+    staffPresets, savePreset, loadPreset, deletePreset
+  } = useAppStore()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isAdding, setIsAdding] = useState(false)
   const [savedMsg, setSavedMsg] = useState(false)
+  const [isSavingPreset, setIsSavingPreset] = useState(false)
+  const [presetName, setPresetName] = useState('')
+  const [presetMsg, setPresetMsg] = useState<string | null>(null)
 
   function handleAdd(data: Omit<Staff, 'id' | 'order'>) {
     const id =
@@ -154,6 +166,27 @@ export default function StaffPage() {
     await saveToStore()
     setSavedMsg(true)
     setTimeout(() => setSavedMsg(false), 2000)
+  }
+
+  async function handleSavePreset() {
+    if (!presetName.trim()) return
+    await savePreset(presetName)
+    setPresetName('')
+    setIsSavingPreset(false)
+    setPresetMsg('プリセットを保存しました')
+    setTimeout(() => setPresetMsg(null), 2000)
+  }
+
+  async function handleLoadPreset(id: string, name: string) {
+    if (!confirm(`「${name}」を読み込みますか？\n現在のスタッフ構成が置き換わります。`)) return
+    await loadPreset(id)
+    setPresetMsg(`「${name}」を読み込みました`)
+    setTimeout(() => setPresetMsg(null), 2000)
+  }
+
+  async function handleDeletePreset(id: string, name: string) {
+    if (!confirm(`「${name}」を削除しますか？`)) return
+    await deletePreset(id)
   }
 
   return (
@@ -268,6 +301,91 @@ export default function StaffPage() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* スタッフ構成プリセット */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold text-slate-700">スタッフ構成プリセット</h2>
+              <p className="text-xs text-slate-400 mt-0.5">同じ構成を別の月でも使い回せます</p>
+            </div>
+            {presetMsg && (
+              <span className="bg-green-100 text-green-700 text-xs px-2.5 py-1 rounded-full font-medium">
+                ✓ {presetMsg}
+              </span>
+            )}
+          </div>
+
+          {/* プリセット一覧 */}
+          {staffPresets.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-2">保存済みプリセットはありません</p>
+          ) : (
+            <div className="space-y-2">
+              {staffPresets.map((preset) => (
+                <div
+                  key={preset.id}
+                  className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-slate-700 text-sm truncate">{preset.name}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {preset.staffList.length}名 · {formatDate(preset.createdAt)}
+                    </p>
+                  </div>
+                  <div className="flex gap-1.5 flex-shrink-0">
+                    <button
+                      onClick={() => handleLoadPreset(preset.id, preset.name)}
+                      className="text-xs text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg hover:bg-blue-50 font-medium transition-colors"
+                    >
+                      読み込む
+                    </button>
+                    <button
+                      onClick={() => handleDeletePreset(preset.id, preset.name)}
+                      className="text-xs text-slate-400 hover:text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                    >
+                      削除
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 現在の構成を保存 */}
+          {isSavingPreset ? (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSavePreset()}
+                placeholder="例: 2026年4月チーム、Aチーム..."
+                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+              />
+              <button
+                onClick={handleSavePreset}
+                disabled={!presetName.trim()}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+              >
+                保存
+              </button>
+              <button
+                onClick={() => { setIsSavingPreset(false); setPresetName('') }}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm px-3 py-2 rounded-lg transition-colors"
+              >
+                取消
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsSavingPreset(true)}
+              className="w-full border-2 border-dashed border-slate-300 hover:border-blue-400 text-slate-400 hover:text-blue-500 rounded-xl py-2.5 text-sm font-medium transition-colors"
+            >
+              ＋ 現在の構成をプリセットとして保存
+            </button>
+          )}
         </div>
       </div>
     </div>

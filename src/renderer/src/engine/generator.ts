@@ -12,7 +12,7 @@ import type {
 const DOW_LABELS = ['日', '月', '火', '水', '木', '金', '土']
 
 // カレンダー情報を構築
-function buildDayInfos(year: number, month: number): DayInfo[] {
+export function buildDayInfos(year: number, month: number): DayInfo[] {
   const days: DayInfo[] = []
   const daysInMonth = new Date(year, month, 0).getDate()
   for (let d = 1; d <= daysInMonth; d++) {
@@ -29,11 +29,10 @@ function buildDayInfos(year: number, month: number): DayInfo[] {
 }
 
 // スタッフのその日前後の連勤数を計算（明けは勤務日に含めない）
-function getConsecutiveWorkDays(shifts: MonthlyShifts, staffId: string, day: number): number {
+export function getConsecutiveWorkDays(shifts: MonthlyShifts, staffId: string, day: number): number {
   const arr = shifts[staffId]
   const n = arr.length - 1
 
-  // 前方
   let before = 0
   for (let d = day - 1; d >= 1; d--) {
     const s = arr[d]
@@ -41,7 +40,6 @@ function getConsecutiveWorkDays(shifts: MonthlyShifts, staffId: string, day: num
     else break
   }
 
-  // 後方
   let after = 0
   for (let d = day + 1; d <= n; d++) {
     const s = arr[d]
@@ -53,7 +51,7 @@ function getConsecutiveWorkDays(shifts: MonthlyShifts, staffId: string, day: num
 }
 
 // その日に勤務可能かどうかチェック（連勤制約）
-function canWork(
+export function canWork(
   shifts: MonthlyShifts,
   staffId: string,
   day: number,
@@ -63,14 +61,10 @@ function canWork(
   const arr = shifts[staffId]
   const current = arr[day]
 
-  // 固定済みセルは変更不可
   if (current !== '') return false
-
-  // 前日が当直なら今日は明け（勤務不可）
   if (day >= 2 && arr[day - 1] === '当') return false
 
-  // 連勤チェック
-  const maxConsecutive = staff.allowExtendedNight ? 999 : 4
+  const maxConsecutive = staff.allowExtendedNight ? 999 : 5
   let consecutive = 0
   let d = day - 1
   while (d >= 1 && (arr[d] === '日' || arr[d] === '当')) {
@@ -79,8 +73,6 @@ function canWork(
   }
   if (consecutive >= maxConsecutive) return false
 
-  // 翌日が希望休の場合、今日当直にすると翌日が明けになり希望が崩れる
-  // → 当直割り当て時に呼び出し元で判断（ここでは日勤のみ）
   void daysInMonth
   void getConsecutiveWorkDays
 
@@ -88,7 +80,7 @@ function canWork(
 }
 
 // 当直をその日に入れられるか（当直専用チェック）
-function canDoNightShift(
+export function canDoNightShift(
   shifts: MonthlyShifts,
   staffId: string,
   day: number,
@@ -97,64 +89,53 @@ function canDoNightShift(
 ): boolean {
   const arr = shifts[staffId]
 
-  // 固定済みセルは不可
-  if (arr[day] !== '') return false
-
-  // 前日が当直なら今日は明けなので不可
+  if (arr[day] !== '' && arr[day] !== '休') return false
   if (day >= 2 && arr[day - 1] === '当') return false
-
-  // 今日当直にすると翌日が明けになる → 翌日が希望休でも明けに上書きしない方針
-  // → 当直後の翌日が希望休の場合は当直不可とする
   if (day + 1 <= daysInMonth && arr[day + 1] === '希') return false
 
-  // 連勤チェック（Bのみ6連勤パターン許可）
   if (staff.allowExtendedNight) {
-    // B: 当→明→当→明→当→明 パターン（実質3回の当直で6連勤）
-    // 前方に「当・明」交互パターンが続いている場合のみ許可
-    // 通常の連勤上限なし（当直専従のため）
     return true
   }
 
-  // その他: 4連勤以内
   let consecutive = 0
   let d = day - 1
   while (d >= 1 && (arr[d] === '日' || arr[d] === '当')) {
     consecutive++
     d--
   }
-  return consecutive < 4
+  return consecutive < 5
 }
 
 // 日勤をその日に入れられるかチェック
-function canDoDayShift(
+// 注意: 公休の先読みチェックは行わない（事前均等配置済みのため不要）
+export function canDoDayShift(
   shifts: MonthlyShifts,
   staffId: string,
   day: number,
-  staff: Staff
+  staff: Staff,
+  daysInMonth = 31
 ): boolean {
   const arr = shifts[staffId]
 
-  // 固定済みセルは不可
   if (arr[day] !== '') return false
-
-  // 前日が当直なら今日は明けなので不可
   if (day >= 2 && arr[day - 1] === '当') return false
 
-  // 非常勤・当直専従は日勤不可
   if (staff.workType === '当直専従' || staff.isPartTime) return false
 
-  // 4連勤以内
   let consecutive = 0
   let d = day - 1
   while (d >= 1 && (arr[d] === '日' || arr[d] === '当')) {
     consecutive++
     d--
   }
-  return consecutive < 4
+  if (consecutive >= 5) return false
+
+  void daysInMonth
+  return true
 }
 
 // スタッフの最近の当直回数を返す（直近N日）
-function recentNightCount(
+export function recentNightCount(
   shifts: MonthlyShifts,
   staffId: string,
   upToDay: number,
@@ -168,12 +149,30 @@ function recentNightCount(
   return count
 }
 
+// 空きスロットから count 個を均等に選ぶ
+function selectEvenly(slots: number[], count: number): number[] {
+  if (count <= 0 || slots.length === 0) return []
+  if (slots.length <= count) return [...slots]
+
+  const result: number[] = []
+  const interval = slots.length / count
+  for (let k = 0; k < count; k++) {
+    const idx = Math.floor(k * interval + interval / 2)
+    result.push(slots[Math.min(idx, slots.length - 1)])
+  }
+  return result
+}
+
 // メインのシフト生成関数
 export function generateShift(input: ShiftInput): ShiftResult {
   const { year, month, staffList, requests, partTimeWorkDays, prevMonthInfo } = input
   const dayInfos = buildDayInfos(year, month)
   const daysInMonth = dayInfos.length
   const violations: ConstraintViolation[] = []
+
+  const satCount = dayInfos.filter((d) => d.isSaturday).length
+  const sunCount = dayInfos.filter((d) => d.isSunday).length
+  const baseHolidays = satCount + sunCount
 
   // シフトグリッド初期化（index 0 は未使用、1〜daysInMonth）
   const shifts: MonthlyShifts = {}
@@ -219,18 +218,32 @@ export function generateShift(input: ShiftInput): ShiftResult {
   )
 
   for (let d = 1; d <= daysInMonth; d++) {
-    // 当直がすでに入っているか確認
     const alreadyHasNight = nightCandidates.some((s) => shifts[s.id][d] === '当')
     if (alreadyHasNight) continue
 
-    // 候補をスコアリングして最適な人を選ぶ
-    // スコアが低いほど優先（最近当直が少ない人を優先）
     const candidates = nightCandidates
       .filter((s) => canDoNightShift(shifts, s.id, d, s, daysInMonth))
-      .map((s) => ({
-        staff: s,
-        score: recentNightCount(shifts, s.id, d, 14) * 10 + (s.isPartTime ? 100 : 0)
-      }))
+      .filter((s) => {
+        // 非常勤は公休不要
+        if (s.isPartTime) return true
+        // この当直+翌日明けで2スロット消費した後に公休が確保できるか
+        const currentLocked = shifts[s.id].filter((sym, i) => i >= 1 && sym !== '').length
+        const emptyAfter = daysInMonth - currentLocked - 2
+        const currentHols = shifts[s.id].filter((sym, i) => i >= 1 && (sym === '休' || sym === '希')).length
+        const holsNeeded = Math.max(0, baseHolidays - currentHols)
+        return emptyAfter >= holsNeeded
+      })
+      .map((s) => {
+        const isWeekend = dayInfos[d - 1].isSaturday || dayInfos[d - 1].isSunday
+        return {
+          staff: s,
+          score:
+            recentNightCount(shifts, s.id, d, 14) * 10 +
+            (s.isPartTime ? 100 : 0) +
+            // 土日は日当両方に当直を避けてBを優先（日勤カバレッジ確保）
+            (isWeekend && s.workType === '日当両方' ? 50 : 0)
+        }
+      })
       .sort((a, b) => a.score - b.score)
 
     if (candidates.length === 0) {
@@ -244,13 +257,180 @@ export function generateShift(input: ShiftInput): ShiftResult {
 
     const chosen = candidates[0].staff
     shifts[chosen.id][d] = '当'
-    // 翌日を明けに
     if (d + 1 <= daysInMonth && shifts[chosen.id][d + 1] === '') {
       shifts[chosen.id][d + 1] = '明'
     }
   }
 
-  // ===== STEP 3: 毎日の日勤を割り当て（R2: 平日・土=2名, R3: 日=1名） =====
+  // ===== STEP 3: 明けの確認（当直翌日が空欄なら明けに R5） =====
+  for (const staff of staffList) {
+    for (let d = 1; d < daysInMonth; d++) {
+      if (shifts[staff.id][d] === '当' && shifts[staff.id][d + 1] === '') {
+        shifts[staff.id][d + 1] = '明'
+      }
+    }
+  }
+
+  // ===== STEP 4: 代休・公休を日勤割り当て前に配置 =====
+  // フェーズA: 全スタッフの代休を先に確定（土/日当直 + 繰越）
+  // フェーズB: 全スタッフの代休配置後に公休を配置（カバレッジ判定が正確になる）
+  const dayCandidates = staffList.filter(
+    (s) => s.workType === '日勤専従' || s.workType === '日当両方'
+  )
+
+  // フェーズA: 代休を全スタッフに配置
+  for (const staff of staffList) {
+    if (staff.isPartTime) continue
+
+    let compNeeded = prevMonthInfo.carryOverCompDays[staff.id] || 0
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dayInfo = dayInfos[d - 1]
+      const s = shifts[staff.id][d]
+      if (dayInfo.isSaturday && s === '当') compNeeded++
+      if (dayInfo.isSunday && s === '当') compNeeded++
+    }
+
+    // 代休を明け翌日に優先配置（公休スペース確保チェック付き）
+    let compLeft = compNeeded
+    for (let d = 2; d <= daysInMonth && compLeft > 0; d++) {
+      if (shifts[staff.id][d] === '' && shifts[staff.id][d - 1] === '明') {
+        // この代休を置いた後に公休が確保できるか確認
+        const emptyAfterThis = shifts[staff.id].filter((s, i) => i >= 1 && s === '').length - 1
+        const currentHols = shifts[staff.id].filter((s, i) => i >= 1 && (s === '休' || s === '希')).length
+        if (emptyAfterThis >= baseHolidays - currentHols) {
+          shifts[staff.id][d] = '代'
+          compLeft--
+        }
+      }
+    }
+    // 残り代休を空きスロットに順次配置（同様の余裕チェック）
+    for (let d = 1; d <= daysInMonth && compLeft > 0; d++) {
+      if (shifts[staff.id][d] === '') {
+        const emptyAfterThis = shifts[staff.id].filter((s, i) => i >= 1 && s === '').length - 1
+        const currentHols = shifts[staff.id].filter((s, i) => i >= 1 && (s === '休' || s === '希')).length
+        if (emptyAfterThis >= baseHolidays - currentHols) {
+          shifts[staff.id][d] = '代'
+          compLeft--
+        }
+      }
+    }
+    if (compLeft > 0) {
+      violations.push({
+        type: 'info',
+        rule: 'R12',
+        message: `${staff.name}: 代休${compLeft}日が当月内に消化できませんでした（翌月繰越）`
+      })
+    }
+  }
+
+  // フェーズB: 全スタッフの公休を「日付ごと」に均等配分
+  // 日曜(R10)→土曜(R2)→平日(R2)の順に、公休数が少ない人を優先して配置
+  // 各日：最大(日勤候補-必要人数)名まで休を配置 + カバレッジチェック
+
+  const sundayDates = dayInfos.filter((di) => di.isSunday).map((di) => di.date)
+  const saturdayDates = dayInfos.filter((di) => di.isSaturday).map((di) => di.date)
+  const weekdayDatesList = dayInfos
+    .filter((di) => !di.isSaturday && !di.isSunday)
+    .map((di) => di.date)
+  const regularDayCandidates = dayCandidates.filter((s) => !s.isPartTime)
+
+  // 公休配置ヘルパー: 1日分の処理（公休数が少ない人から優先、カバレッジ上限付き）
+  function placeRestForDay(
+    d: number,
+    required: number,
+    maxRest: number,
+    sortKey: (s: Staff) => number
+  ) {
+    const eligible = staffList
+      .filter((s) => !s.isPartTime && shifts[s.id][d] === '')
+      .filter((s) => {
+        const hols = shifts[s.id].filter((sym, i) => i >= 1 && (sym === '休' || sym === '希')).length
+        return hols < baseHolidays
+      })
+      .map((s) => ({ staff: s, key: sortKey(s) }))
+      .sort((a, b) => a.key - b.key)
+
+    let restCount = 0
+    for (const { staff } of eligible) {
+      if (restCount >= maxRest) break
+      const otherAvailable = dayCandidates
+        .filter((s) => s.id !== staff.id && shifts[s.id][d] === '')
+        .length
+      if (otherAvailable >= required) {
+        shifts[staff.id][d] = '休'
+        restCount++
+      }
+    }
+  }
+
+  // B-1: 日曜を日付順に処理（R10: 日曜休み均等配分）
+  for (const d of sundayDates) {
+    placeRestForDay(
+      d, 1, Math.max(0, regularDayCandidates.length - 1),
+      (s) => sundayDates.filter((sd) => sd < d && (shifts[s.id][sd] === '休' || shifts[s.id][sd] === '希')).length
+    )
+  }
+
+  // B-2: 土曜を日付順に処理（R2: 土曜日勤2名確保）
+  for (const d of saturdayDates) {
+    placeRestForDay(
+      d, 2, Math.max(0, regularDayCandidates.length - 2),
+      (s) => saturdayDates.filter((sd) => sd < d && (shifts[s.id][sd] === '休' || shifts[s.id][sd] === '希')).length
+    )
+  }
+
+  // B-3: 平日を日付順に処理（R2: 平日日勤2名確保）
+  // 残り公休が少ない順に優先し、最大3名まで休を配置
+  for (const d of weekdayDatesList) {
+    placeRestForDay(
+      d, 2, Math.max(0, regularDayCandidates.length - 2),
+      (s) => shifts[s.id].filter((sym, i) => i >= 1 && i < d && (sym === '休' || sym === '希')).length
+    )
+  }
+
+  // B-4: 各スタッフの残り公休不足をフェーズBで確定（STEP 5 前に全員を基準値に）
+  // B-1〜B-3 の均等配分で取りこぼした分をここで補う
+  for (const staff of staffList) {
+    if (staff.isPartTime) continue
+    const currentRest = shifts[staff.id].filter((s, i) => i >= 1 && (s === '休' || s === '希')).length
+    let holsLeft = Math.max(0, baseHolidays - currentRest)
+    if (holsLeft === 0) continue
+
+    // Pass 1: カバレッジを尊重して配置
+    for (let d = 1; d <= daysInMonth && holsLeft > 0; d++) {
+      if (shifts[staff.id][d] === '') {
+        const dayInfo = dayInfos[d - 1]
+        const required = dayInfo.isSunday ? 1 : 2
+        const otherAvailable = dayCandidates
+          .filter((s) => s.id !== staff.id && shifts[s.id][d] === '')
+          .length
+        if (otherAvailable >= required) {
+          shifts[staff.id][d] = '休'
+          holsLeft--
+        }
+      }
+    }
+    // Pass 2: 残り不足分を均等分散で配置（先頭集中を避けR13優先）
+    if (holsLeft > 0) {
+      const allEmptySlots: number[] = []
+      for (let d = 1; d <= daysInMonth; d++) {
+        if (shifts[staff.id][d] === '') allEmptySlots.push(d)
+      }
+      const chosen = selectEvenly(allEmptySlots, Math.min(holsLeft, allEmptySlots.length))
+      for (const d of chosen) shifts[staff.id][d] = '休'
+      holsLeft -= chosen.length
+    }
+    // Pass 3: それでも不足なら空きに順次配置（最終手段）
+    for (let d = 1; d <= daysInMonth && holsLeft > 0; d++) {
+      if (shifts[staff.id][d] === '') {
+        shifts[staff.id][d] = '休'
+        holsLeft--
+      }
+    }
+  }
+
+  // ===== STEP 5: 毎日の日勤を割り当て（R2: 平日・土=2名, R3: 日=1名） =====
+  // 公休は STEP 4 で事前配置済みなので先読みチェック不要
   const dayShiftCandidates = staffList.filter(
     (s) => s.workType === '日勤専従' || s.workType === '日当両方'
   )
@@ -262,12 +442,17 @@ export function generateShift(input: ShiftInput): ShiftResult {
     const currentDayCount = dayShiftCandidates.filter((s) => shifts[s.id][d] === '日').length
     if (currentDayCount >= requiredCount) continue
 
-    // 優先度: 日勤専従（A）> 日当両方で当直が少ない人
     const candidates = dayShiftCandidates
-      .filter((s) => canDoDayShift(shifts, s.id, d, s))
+      .filter((s) => canDoDayShift(shifts, s.id, d, s, daysInMonth))
+      .filter((s) => shifts[s.id][d] !== '当')
       .filter((s) => {
-        // 今日すでに当直になっている人は除外
-        return shifts[s.id][d] !== '当'
+        // 日勤を入れた後に公休が確保できるか確認（非常勤は対象外）
+        if (s.isPartTime) return true
+        const currentLocked = shifts[s.id].filter((sym, i) => i >= 1 && sym !== '').length
+        const emptyAfter = daysInMonth - currentLocked - 1
+        const currentHols = shifts[s.id].filter((sym, i) => i >= 1 && (sym === '休' || sym === '希')).length
+        const holsNeeded = Math.max(0, baseHolidays - currentHols)
+        return emptyAfter >= holsNeeded
       })
       .map((s) => ({
         staff: s,
@@ -295,142 +480,118 @@ export function generateShift(input: ShiftInput): ShiftResult {
     }
   }
 
-  // ===== STEP 4: 明けの再確認（当直翌日が空欄なら明けに R5） =====
+  // ===== STEP 6: 日曜日勤の代休補填（R11） =====
   for (const staff of staffList) {
-    for (let d = 1; d < daysInMonth; d++) {
-      if (shifts[staff.id][d] === '当' && shifts[staff.id][d + 1] === '') {
-        shifts[staff.id][d + 1] = '明'
+    if (staff.isPartTime) continue
+
+    let sundayDayShiftComp = 0
+    for (let d = 1; d <= daysInMonth; d++) {
+      if (dayInfos[d - 1].isSunday && shifts[staff.id][d] === '日') {
+        sundayDayShiftComp++
       }
     }
-  }
 
-  // ===== STEP 5: 代休の計算と付与（R11） =====
-  // 土曜当直・日曜当直・日曜日勤に1日ずつ代休付与
-  const compDaysToAssign: Record<string, number> = {}
-  for (const staff of staffList) {
-    if (staff.isPartTime) continue
-    let comp = prevMonthInfo.carryOverCompDays[staff.id] || 0
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dayInfo = dayInfos[d - 1]
-      const s = shifts[staff.id][d]
-      if (dayInfo.isSaturday && s === '当') comp++
-      if (dayInfo.isSunday && (s === '当' || s === '日')) comp++
-    }
-    compDaysToAssign[staff.id] = comp
-  }
-
-  // ===== STEP 6: 公休数の確保と空きセルへの休み付与（R13） =====
-  const satCount = dayInfos.filter((d) => d.isSaturday).length
-  const sunCount = dayInfos.filter((d) => d.isSunday).length
-  const baseHolidays = satCount + sunCount
-
-  for (const staff of staffList) {
-    if (staff.isPartTime) continue
-
-    // 代休を付与（空きセルに埋める）
-    let compLeft = compDaysToAssign[staff.id] || 0
-    // 理想的には当→明の翌日（R8サイクル）に配置
-    for (let d = 1; d <= daysInMonth && compLeft > 0; d++) {
-      if (shifts[staff.id][d] === '') {
-        const prevDay = d >= 2 ? shifts[staff.id][d - 1] : ''
-        if (prevDay === '明') {
+    // 日曜日勤の代休を明け翌日または空きスロットに配置（公休スペース確保チェック付き）
+    let compLeft = sundayDayShiftComp
+    for (let d = 2; d <= daysInMonth && compLeft > 0; d++) {
+      if (shifts[staff.id][d] === '' && shifts[staff.id][d - 1] === '明') {
+        const emptyAfterThis = shifts[staff.id].filter((s, i) => i >= 1 && s === '').length - 1
+        const currentHols = shifts[staff.id].filter((s, i) => i >= 1 && (s === '休' || s === '希')).length
+        if (emptyAfterThis >= baseHolidays - currentHols) {
           shifts[staff.id][d] = '代'
           compLeft--
         }
       }
     }
-    // 残りの代休は空きセルに順次配置
     for (let d = 1; d <= daysInMonth && compLeft > 0; d++) {
       if (shifts[staff.id][d] === '') {
-        shifts[staff.id][d] = '代'
-        compLeft--
-      }
-    }
-
-    // 公休を付与（希望休は公休から消費するため、希望休分を差し引いた残りを埋める）
-    const targetHolidays = baseHolidays
-    const currentRestAfterComp = shifts[staff.id].filter((s) => s === '休' || s === '希').length
-
-    let restLeft = Math.max(0, targetHolidays - currentRestAfterComp)
-
-    // 月1連休確保（R9）: 既存の明けの翌日、または土日周辺に連休を作る試み
-    let hadConsecutiveRest = false
-    for (let d = 2; d <= daysInMonth; d++) {
-      if (
-        (shifts[staff.id][d - 1] === '休' || shifts[staff.id][d - 1] === '代') &&
-        shifts[staff.id][d] === ''
-      ) {
-        hadConsecutiveRest = true
-        break
-      }
-    }
-
-    // 空きセルに休みを付与（土日優先）
-    const sundayIndices = dayInfos
-      .filter((d) => d.isSunday)
-      .map((d) => d.date)
-    const saturdayIndices = dayInfos
-      .filter((d) => d.isSaturday)
-      .map((d) => d.date)
-
-    // 土日の空きに休みを配置
-    for (const d of [...sundayIndices, ...saturdayIndices]) {
-      if (restLeft <= 0) break
-      if (shifts[staff.id][d] === '') {
-        shifts[staff.id][d] = '休'
-        restLeft--
-      }
-    }
-
-    // まだ足りなければ平日の空きに
-    for (let d = 1; d <= daysInMonth && restLeft > 0; d++) {
-      if (shifts[staff.id][d] === '') {
-        shifts[staff.id][d] = '休'
-        restLeft--
-      }
-    }
-
-    // 公休超過チェック
-    const finalHolidays = shifts[staff.id].filter((s) => s === '休' || s === '希').length
-    if (finalHolidays > baseHolidays) {
-      violations.push({
-        type: 'info',
-        rule: 'R13',
-        message: `${staff.name}: 公休数が${finalHolidays}日（基準${baseHolidays}日、+${finalHolidays - baseHolidays}日超過）`
-      })
-    } else if (finalHolidays < baseHolidays) {
-      violations.push({
-        type: 'warning',
-        rule: 'R13',
-        message: `${staff.name}: 公休数が${finalHolidays}日（基準${baseHolidays}日、${baseHolidays - finalHolidays}日不足）`
-      })
-    }
-
-    // 連休チェック（月1回確保）
-    if (!hadConsecutiveRest) {
-      let foundConsecutive = false
-      for (let d = 2; d <= daysInMonth; d++) {
-        const s1 = shifts[staff.id][d - 1]
-        const s2 = shifts[staff.id][d]
-        if (
-          (s1 === '休' || s1 === '代' || s1 === '希' || s1 === '明') &&
-          (s2 === '休' || s2 === '代' || s2 === '希')
-        ) {
-          foundConsecutive = true
-          break
+        const emptyAfterThis = shifts[staff.id].filter((s, i) => i >= 1 && s === '').length - 1
+        const currentHols = shifts[staff.id].filter((s, i) => i >= 1 && (s === '休' || s === '希')).length
+        if (emptyAfterThis >= baseHolidays - currentHols) {
+          shifts[staff.id][d] = '代'
+          compLeft--
         }
       }
-      if (!foundConsecutive) {
-        violations.push({
-          type: 'info',
-          rule: 'R9',
-          message: `${staff.name}: 連休（2日以上の連続休み）が確保できませんでした`
-        })
-      }
+    }
+    if (compLeft > 0) {
+      violations.push({
+        type: 'info',
+        rule: 'R12',
+        message: `${staff.name}: 代休${compLeft}日が当月内に消化できませんでした（翌月繰越）`
+      })
     }
   }
 
-  // ===== STEP 7: 集計 =====
+  // ===== STEP 7: 公休数の最終確認・補填（R13） =====
+  for (const staff of staffList) {
+    if (staff.isPartTime) continue
+
+    const finalHols = shifts[staff.id].filter((s, i) => i >= 1 && (s === '休' || s === '希')).length
+
+    if (finalHols < baseHolidays) {
+      // 不足分を補填: Pass1=カバレッジ尊重、Pass2=R13優先で残り全配置
+      let holsLeft = baseHolidays - finalHols
+      for (let d = 1; d <= daysInMonth && holsLeft > 0; d++) {
+        if (shifts[staff.id][d] === '') {
+          const dayInfo = dayInfos[d - 1]
+          const required = dayInfo.isSunday ? 1 : 2
+          const otherAvailable = dayCandidates
+            .filter((s) => s.id !== staff.id && shifts[s.id][d] === '')
+            .length
+          if (otherAvailable >= required) {
+            shifts[staff.id][d] = '休'
+            holsLeft--
+          }
+        }
+      }
+      for (let d = 1; d <= daysInMonth && holsLeft > 0; d++) {
+        if (shifts[staff.id][d] === '') {
+          shifts[staff.id][d] = '休'
+          holsLeft--
+        }
+      }
+      const afterFill = shifts[staff.id].filter((s, i) => i >= 1 && (s === '休' || s === '希')).length
+      if (afterFill < baseHolidays) {
+        violations.push({
+          type: 'warning',
+          rule: 'R13',
+          message: `${staff.name}: 公休数が${afterFill}日（基準${baseHolidays}日、${baseHolidays - afterFill}日不足）`
+        })
+      }
+    } else if (finalHols > baseHolidays) {
+      violations.push({
+        type: 'info',
+        rule: 'R13',
+        message: `${staff.name}: 公休数が${finalHols}日（基準${baseHolidays}日、+${finalHols - baseHolidays}日超過）`
+      })
+    }
+  }
+
+  // ===== STEP 8: 連休チェック（R9） =====
+  for (const staff of staffList) {
+    if (staff.isPartTime) continue
+    let foundConsecutive = false
+    for (let d = 2; d <= daysInMonth; d++) {
+      const s1 = shifts[staff.id][d - 1]
+      const s2 = shifts[staff.id][d]
+      if (
+        (s1 === '休' || s1 === '代' || s1 === '希' || s1 === '明') &&
+        (s2 === '休' || s2 === '代' || s2 === '希')
+      ) {
+        foundConsecutive = true
+        break
+      }
+    }
+    if (!foundConsecutive) {
+      violations.push({
+        type: 'info',
+        rule: 'R9',
+        message: `${staff.name}: 連休（2日以上の連続休み）が確保できませんでした`
+      })
+    }
+  }
+
+  // ===== STEP 9: 集計 =====
   const summaries: StaffSummary[] = staffList.map((staff) => {
     const arr = shifts[staff.id]
     let holidayCount = 0
@@ -440,6 +601,8 @@ export function generateShift(input: ShiftInput): ShiftResult {
     let sundayRestCount = 0
     let maxConsec = 0
     let currentConsec = 0
+    let consecutiveRestCount = 0
+    let restStreak = 0
 
     for (let d = 1; d <= daysInMonth; d++) {
       const s = arr[d]
@@ -458,7 +621,15 @@ export function generateShift(input: ShiftInput): ShiftResult {
       } else {
         currentConsec = 0
       }
+
+      if (s === '休' || s === '代' || s === '希' || s === '明') {
+        restStreak++
+      } else {
+        if (restStreak >= 2) consecutiveRestCount++
+        restStreak = 0
+      }
     }
+    if (restStreak >= 2) consecutiveRestCount++
 
     return {
       staffId: staff.id,
@@ -467,19 +638,20 @@ export function generateShift(input: ShiftInput): ShiftResult {
       dayShiftCount,
       nightShiftCount,
       sundayRestCount,
-      maxConsecutiveDays: maxConsec
+      maxConsecutiveDays: maxConsec,
+      consecutiveRestCount
     }
   })
 
-  // ===== STEP 8: 連勤違反チェック（R6） =====
+  // ===== STEP 10: 連勤違反チェック（R6） =====
   for (const staff of staffList) {
     const summary = summaries.find((s) => s.staffId === staff.id)!
-    const max = staff.allowExtendedNight ? 6 : 4
+    const max = 6
     if (summary.maxConsecutiveDays > max) {
       violations.push({
         type: 'warning',
         rule: 'R6',
-        message: `${staff.name}: 最大${summary.maxConsecutiveDays}連勤（上限${max}日）`
+        message: `${staff.name}: 最大${summary.maxConsecutiveDays}連勤（上限${max}日超過）`
       })
     }
   }
@@ -507,7 +679,8 @@ export function generateCSV(result: ShiftResult, staffList: Staff[]): string {
     '日勤数',
     '当直数',
     '日曜休み数',
-    '最大連勤数'
+    '最大連勤数',
+    '連休数'
   ]
 
   const rows: string[][] = [headers]
@@ -522,12 +695,12 @@ export function generateCSV(result: ShiftResult, staffList: Staff[]): string {
       String(summary?.dayShiftCount ?? ''),
       String(summary?.nightShiftCount ?? ''),
       String(summary?.sundayRestCount ?? ''),
-      String(summary?.maxConsecutiveDays ?? '')
+      String(summary?.maxConsecutiveDays ?? ''),
+      String(summary?.consecutiveRestCount ?? '')
     ]
     rows.push(row)
   }
 
-  // フッター行: 日勤人数合計
   const dayShiftCandidates = staffList.filter(
     (s) => s.workType === '日勤専従' || s.workType === '日当両方'
   )
@@ -542,11 +715,11 @@ export function generateCSV(result: ShiftResult, staffList: Staff[]): string {
     '',
     '',
     '',
+    '',
     ''
   ]
   rows.push(dayCountRow)
 
-  // フッター行: 当直担当者
   const nightCandidates = staffList.filter(
     (s) => s.workType === '当直専従' || s.workType === '日当両方' || s.isPartTime
   )
@@ -562,11 +735,12 @@ export function generateCSV(result: ShiftResult, staffList: Staff[]): string {
     '',
     '',
     '',
+    '',
     ''
   ]
   rows.push(nightRow)
 
-  return rows.map((r) => r.join(',')).join('\n')
+  return '﻿' + rows.map((r) => r.join(',')).join('\n')
 }
 
 // マークダウンテーブル生成
@@ -581,7 +755,8 @@ export function generateMarkdownTable(result: ShiftResult, staffList: Staff[]): 
     '日勤数',
     '当直数',
     '日曜休み数',
-    '最大連勤数'
+    '最大連勤数',
+    '連休数'
   ]
 
   const separator = headers.map(() => '---').join(' | ')
@@ -598,7 +773,8 @@ export function generateMarkdownTable(result: ShiftResult, staffList: Staff[]): 
       String(summary?.dayShiftCount ?? ''),
       String(summary?.nightShiftCount ?? ''),
       String(summary?.sundayRestCount ?? ''),
-      String(summary?.maxConsecutiveDays ?? '')
+      String(summary?.maxConsecutiveDays ?? ''),
+      String(summary?.consecutiveRestCount ?? '')
     ]
     return '| ' + cells.join(' | ') + ' |'
   })
@@ -616,7 +792,7 @@ export function generateMarkdownTable(result: ShiftResult, staffList: Staff[]): 
       const d = i + 1
       return String(dayShiftCandidates.filter((s) => shifts[s.id][d] === '日').length)
     }).join(' | ') +
-    ' |  |  |  |  |  |  |'
+    ' |  |  |  |  |  |  |  |'
 
   const nightRow =
     '| 当直担当 | ' +
@@ -625,7 +801,7 @@ export function generateMarkdownTable(result: ShiftResult, staffList: Staff[]): 
       const staff = nightCandidates.find((s) => shifts[s.id][d] === '当')
       return staff ? staff.name : '　'
     }).join(' | ') +
-    ' |  |  |  |  |  |  |'
+    ' |  |  |  |  |  |  |  |'
 
   return [headerRow, sepRow, ...dataRows, dayCountRow, nightRow].join('\n')
 }

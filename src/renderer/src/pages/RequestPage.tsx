@@ -25,9 +25,10 @@ interface StaffCalendarProps {
   onToggle: (day: number) => void
   label: string
   color: string
+  readOnly?: boolean
 }
 
-function StaffCalendar({ staff, year, month, selectedDays, onToggle, label, color }: StaffCalendarProps) {
+function StaffCalendar({ staff, year, month, selectedDays, onToggle, label, color, readOnly = false }: StaffCalendarProps) {
   const days = buildCalendar(year, month)
   const firstDow = new Date(year, month - 1, 1).getDay()
 
@@ -35,21 +36,22 @@ function StaffCalendar({ staff, year, month, selectedDays, onToggle, label, colo
   const blanks = Array(firstDow).fill(null)
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div className={clsx('bg-white rounded-2xl border shadow-sm overflow-hidden', readOnly ? 'border-slate-100 opacity-75' : 'border-slate-200')}>
       {/* ヘッダー */}
-      <div className={`px-4 py-3 flex items-center justify-between ${color}`}>
+      <div className={clsx('px-4 py-3 flex items-center justify-between', readOnly ? 'bg-slate-400' : color)}>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-white bg-opacity-30 rounded-full flex items-center justify-center text-white font-bold text-sm">
             {staff.name.charAt(0)}
           </div>
           <div>
             <p className="text-white font-semibold">{staff.name}</p>
-            <p className="text-white text-opacity-80 text-xs">{label}</p>
+            <p className="text-white text-opacity-80 text-xs">{readOnly ? '閲覧のみ（編集不可）' : label}</p>
           </div>
         </div>
         <div className="text-right">
           <p className="text-white text-sm font-medium">{selectedDays.length}日選択</p>
-          {selectedDays.length > 0 && (
+          {/* 読み取り専用時はクリアボタンを非表示 */}
+          {!readOnly && selectedDays.length > 0 && (
             <button
               onClick={() => selectedDays.forEach((d) => onToggle(d))}
               className="text-white text-opacity-70 text-xs hover:text-opacity-100"
@@ -89,10 +91,19 @@ function StaffCalendar({ staff, year, month, selectedDays, onToggle, label, colo
             return (
               <button
                 key={date}
-                onClick={() => onToggle(date)}
+                onClick={() => !readOnly && onToggle(date)}
+                disabled={readOnly}
                 className={clsx(
                   'aspect-square rounded-lg text-sm font-medium transition-all duration-100 flex items-center justify-center',
-                  isSelected
+                  readOnly
+                    ? isSelected
+                      ? 'bg-slate-400 text-white cursor-default'
+                      : isSun
+                      ? 'bg-red-50 text-red-300 cursor-default'
+                      : isSat
+                      ? 'bg-blue-50 text-blue-300 cursor-default'
+                      : 'bg-slate-50 text-slate-300 cursor-default'
+                    : isSelected
                     ? 'bg-purple-500 text-white shadow-sm scale-95'
                     : isSun
                     ? 'bg-red-50 text-red-500 hover:bg-red-100'
@@ -115,7 +126,10 @@ function StaffCalendar({ staff, year, month, selectedDays, onToggle, label, colo
               return (
                 <span
                   key={d}
-                  className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full font-medium"
+                  className={clsx(
+                    'text-xs px-2 py-0.5 rounded-full font-medium',
+                    readOnly ? 'bg-slate-100 text-slate-400' : 'bg-purple-100 text-purple-700'
+                  )}
                 >
                   {d}日({DOW_LABELS[dow]})
                 </span>
@@ -138,6 +152,13 @@ const STAFF_COLORS = [
   'bg-rose-500'
 ]
 
+// 編集可能な月（来月）を計算する
+function getEditableMonth(): { year: number; month: number } {
+  const today = new Date()
+  const d = new Date(today.getFullYear(), today.getMonth() + 1, 1)
+  return { year: d.getFullYear(), month: d.getMonth() + 1 }
+}
+
 export default function RequestPage() {
   const {
     staffList,
@@ -149,6 +170,10 @@ export default function RequestPage() {
     toggleRequestDay,
     togglePartTimeDay
   } = useAppStore()
+
+  // 来月のみ編集可
+  const editable = getEditableMonth()
+  const isEditable = selectedYear === editable.year && selectedMonth === editable.month
 
   // 前月・翌月への移動（月をまたぐ場合は年も更新）
   const goToPrevMonth = () => {
@@ -195,7 +220,10 @@ export default function RequestPage() {
             >
               ▶
             </button>
-            <span className="text-slate-400 text-sm">— カレンダーの日付をタップして選択します</span>
+            {isEditable
+              ? <span className="text-slate-400 text-sm">— カレンダーの日付をタップして選択します</span>
+              : <span className="bg-slate-100 text-slate-500 text-xs px-2.5 py-1 rounded-full font-medium">閲覧のみ（編集は来月のみ）</span>
+            }
           </div>
         </div>
 
@@ -245,6 +273,7 @@ export default function RequestPage() {
                   onToggle={(day) => toggleRequestDay(staff.id, day)}
                   label="希望休"
                   color={STAFF_COLORS[idx % STAFF_COLORS.length]}
+                  readOnly={!isEditable}
                 />
               ))
             )}
@@ -277,6 +306,7 @@ export default function RequestPage() {
                     onToggle={(day) => togglePartTimeDay(staff.id, day)}
                     label="当直指定日"
                     color={`bg-amber-${500 + idx * 100}`}
+                    readOnly={!isEditable}
                   />
                 ))}
               </>

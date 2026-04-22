@@ -10,7 +10,10 @@
     "preview": "electron-vite preview",
     "build:mac": "npm run build && electron-builder --mac",
     "build:win": "npm run build && electron-builder --win",
-    "build:all": "npm run build && electron-builder --mac --win"
+    "build:all": "npm run build && electron-builder --mac --win",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
@@ -29,12 +32,15 @@
     "@types/react": "^18.2.79",
     "@types/react-dom": "^18.2.25",
     "@vitejs/plugin-react": "^4.2.1",
+    "@vitest/coverage-v8": "^4.1.5",
     "autoprefixer": "^10.4.19",
     "electron": "^30.5.1",
     "electron-builder": "^24.13.3",
     "electron-vite": "^2.1.0",
+    "jsdom": "^29.0.2",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.3",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.5"
   }
 }
