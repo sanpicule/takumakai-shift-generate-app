@@ -15,11 +15,13 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },
+  "optionalDependencies": {
+    "@rollup/rollup-darwin-arm64": "^4.60.2"
+  },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@electron-toolkit/utils": "^4.0.0",
-    "@rollup/rollup-darwin-arm64": "^4.60.2",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "electron-store": "^8.2.0",
