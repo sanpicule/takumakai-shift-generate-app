@@ -31,7 +31,7 @@
       NSDownloadsFolderUsageDescription: "Application requests access to the user's Downloads folder."
     },
     notarize: false,
-    target: [{ target: "dmg", arch: ["x64", "arm64"] }]
+    target: [{ target: "zip", arch: ["arm64"] }]
   },
   dmg: {
     artifactName: "${name}-${version}.${ext}"
