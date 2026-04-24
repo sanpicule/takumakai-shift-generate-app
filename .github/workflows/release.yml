@@ -23,6 +23,8 @@ jobs:
 
       - name: Macビルド
         run: npm run build:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Releaseにアップロード
         uses: softprops/action-gh-release@v2
@@ -44,6 +46,8 @@ jobs:
 
       - name: Windowsビルド
         run: npm run build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Releaseにアップロード
         uses: softprops/action-gh-release@v2
