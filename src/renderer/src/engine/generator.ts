@@ -410,15 +410,27 @@ export function generateShift(input: ShiftInput): ShiftResult {
         }
       }
     }
-    // Pass 2: 残り不足分を均等分散で配置（先頭集中を避けR13優先）
+    // Pass 2: カバレッジOKスロット優先で均等配置、不足分はフォールバック
     if (holsLeft > 0) {
-      const allEmptySlots: number[] = []
+      const validSlots: number[] = []
+      const fallbackSlots: number[] = []
       for (let d = 1; d <= daysInMonth; d++) {
-        if (shifts[staff.id][d] === '') allEmptySlots.push(d)
+        if (shifts[staff.id][d] === '') {
+          const dayInfo = dayInfos[d - 1]
+          const required = dayInfo.isSunday ? 1 : 2
+          const otherAvailable = dayCandidates
+            .filter((s) => s.id !== staff.id && shifts[s.id][d] === '')
+            .length
+          if (otherAvailable >= required) validSlots.push(d)
+          else fallbackSlots.push(d)
+        }
       }
-      const chosen = selectEvenly(allEmptySlots, Math.min(holsLeft, allEmptySlots.length))
-      for (const d of chosen) shifts[staff.id][d] = '休'
-      holsLeft -= chosen.length
+      const chosen = selectEvenly(validSlots, Math.min(holsLeft, validSlots.length))
+      for (const d of chosen) { shifts[staff.id][d] = '休'; holsLeft-- }
+      if (holsLeft > 0) {
+        const fallback = selectEvenly(fallbackSlots, Math.min(holsLeft, fallbackSlots.length))
+        for (const d of fallback) { shifts[staff.id][d] = '休'; holsLeft-- }
+      }
     }
     // Pass 3: それでも不足なら空きに順次配置（最終手段）
     for (let d = 1; d <= daysInMonth && holsLeft > 0; d++) {
@@ -544,6 +556,26 @@ export function generateShift(input: ShiftInput): ShiftResult {
           }
         }
       }
+      // Pass 2: カバレッジ確認ありで均等分散配置
+      if (holsLeft > 0) {
+        const validSlots: number[] = []
+        for (let d = 1; d <= daysInMonth; d++) {
+          if (shifts[staff.id][d] === '') {
+            const dayInfo = dayInfos[d - 1]
+            const required = dayInfo.isSunday ? 1 : 2
+            const otherAvailable = dayCandidates
+              .filter((s) => s.id !== staff.id && shifts[s.id][d] === '')
+              .length
+            if (otherAvailable >= required) validSlots.push(d)
+          }
+        }
+        const chosen = selectEvenly(validSlots, Math.min(holsLeft, validSlots.length))
+        for (const d of chosen) {
+          shifts[staff.id][d] = '休'
+          holsLeft--
+        }
+      }
+      // Pass 3: 最終手段（公休数確保を最優先）
       for (let d = 1; d <= daysInMonth && holsLeft > 0; d++) {
         if (shifts[staff.id][d] === '') {
           shifts[staff.id][d] = '休'
