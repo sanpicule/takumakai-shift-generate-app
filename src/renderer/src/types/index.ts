@@ -53,9 +53,9 @@ export interface ShiftInput {
   prevMonthInfo: PrevMonthInfo
 }
 
-// 制約違反レポート
+// 制約違反レポート（critical = 日勤確保不可能など絶対違反）
 export interface ConstraintViolation {
-  type: 'warning' | 'info'
+  type: 'warning' | 'info' | 'critical'
   rule: string
   message: string
 }

@@ -22,6 +22,7 @@ export default function HomePage() {
 
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState('')
+  const [criticalMessages, setCriticalMessages] = useState<string[]>([])
 
   const nightStaff = staffList.filter(
     (s) => s.workType === '当直専従' || s.workType === '日当両方' || s.isPartTime
@@ -44,8 +45,16 @@ export default function HomePage() {
         partTimeWorkDays,
         prevMonthInfo
       })
-      setShiftResult(result)
-      navigate('/result')
+      const criticals = result.violations
+        .filter((v) => v.type === 'critical')
+        .map((v) => v.message)
+      if (criticals.length > 0) {
+        setShiftResult(result)
+        setCriticalMessages(criticals)
+      } else {
+        setShiftResult(result)
+        navigate('/result')
+      }
     } catch (e) {
       setError('シフト生成中にエラーが発生しました: ' + String(e))
     } finally {
@@ -63,6 +72,42 @@ export default function HomePage() {
 
   return (
     <div className="flex-1 overflow-auto p-6 fade-in">
+      {/* 日勤確保不可能ポップアップ */}
+      {criticalMessages.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-start gap-3 mb-4">
+              <span className="text-red-500 text-2xl">⚠️</span>
+              <div>
+                <h2 className="text-lg font-bold text-red-600">この条件ではシフトを生成できません</h2>
+                <p className="text-sm text-slate-600 mt-1">
+                  以下の日に日勤担当者を確保できませんでした。スタッフの希望休・前月情報を見直してください。
+                </p>
+              </div>
+            </div>
+            <ul className="bg-red-50 rounded-lg p-3 space-y-1 mb-5 max-h-48 overflow-y-auto">
+              {criticalMessages.map((msg, i) => (
+                <li key={i} className="text-sm text-red-700">• {msg}</li>
+              ))}
+            </ul>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setCriticalMessages([])}
+                className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50"
+              >
+                閉じる
+              </button>
+              <button
+                onClick={() => { setCriticalMessages([]); navigate('/result') }}
+                className="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600"
+              >
+                結果を確認する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-2xl mx-auto space-y-5">
         {/* ページタイトル */}
         <div>

@@ -410,26 +410,23 @@ export function generateShift(input: ShiftInput): ShiftResult {
         }
       }
     }
-    // Pass 2: カバレッジOKスロット優先で均等配置、不足分はフォールバック
+    // Pass 2: カバレッジOKスロット優先で均等配置（日勤0発生を抑制）
     if (holsLeft > 0) {
-      const validSlots: number[] = []
-      const fallbackSlots: number[] = []
+      const safeSlots: number[] = []
+      const unsafeSlots: number[] = []
       for (let d = 1; d <= daysInMonth; d++) {
-        if (shifts[staff.id][d] === '') {
-          const dayInfo = dayInfos[d - 1]
-          const required = dayInfo.isSunday ? 1 : 2
-          const otherAvailable = dayCandidates
-            .filter((s) => s.id !== staff.id && shifts[s.id][d] === '')
-            .length
-          if (otherAvailable >= required) validSlots.push(d)
-          else fallbackSlots.push(d)
-        }
+        if (shifts[staff.id][d] !== '') continue
+        const di = dayInfos[d - 1]
+        const req = di.isSunday ? 1 : 2
+        const others = dayCandidates.filter((s) => s.id !== staff.id && shifts[s.id][d] === '').length
+        if (others >= req) safeSlots.push(d)
+        else unsafeSlots.push(d)
       }
-      const chosen = selectEvenly(validSlots, Math.min(holsLeft, validSlots.length))
-      for (const d of chosen) { shifts[staff.id][d] = '休'; holsLeft-- }
+      const chosenSafe = selectEvenly(safeSlots, Math.min(holsLeft, safeSlots.length))
+      for (const d of chosenSafe) { shifts[staff.id][d] = '休'; holsLeft-- }
       if (holsLeft > 0) {
-        const fallback = selectEvenly(fallbackSlots, Math.min(holsLeft, fallbackSlots.length))
-        for (const d of fallback) { shifts[staff.id][d] = '休'; holsLeft-- }
+        const chosenUnsafe = selectEvenly(unsafeSlots, Math.min(holsLeft, unsafeSlots.length))
+        for (const d of chosenUnsafe) { shifts[staff.id][d] = '休'; holsLeft-- }
       }
     }
     // Pass 3: それでも不足なら空きに順次配置（最終手段）
@@ -488,6 +485,40 @@ export function generateShift(input: ShiftInput): ShiftResult {
         type: 'warning',
         rule: dayInfo.isSunday ? 'R3' : 'R2',
         message: `${dayInfo.label}: 日勤が${assigned}名しか確保できませんでした（必要: ${requiredCount}名）`
+      })
+    }
+  }
+
+  // ===== STEP 5a: 日勤0日の強制修正 =====
+  // 公休に余裕（基準値超）があるスタッフの「休」を「日」に変換して最低1名を保証。
+  // 余裕のある人が不在 = スタッフ数や希望休の条件では確保不可能 → critical 違反として記録。
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dayInfo = dayInfos[d - 1]
+    const currentCount = dayShiftCandidates.filter((s) => shifts[s.id][d] === '日').length
+    if (currentCount > 0) continue
+
+    // 公休数が基準値より多いスタッフのみを対象（変換後も公休数が基準値以上になる）
+    const rescuable = dayShiftCandidates
+      .filter((s) => shifts[s.id][d] === '休' || shifts[s.id][d] === '希')
+      .filter((s) => {
+        const hols = shifts[s.id].filter((sym, i) => i >= 1 && (sym === '休' || sym === '希')).length
+        return hols > baseHolidays
+      })
+      .sort((a, b) => {
+        const aHols = shifts[a.id].filter((sym, i) => i >= 1 && (sym === '休' || sym === '希')).length
+        const bHols = shifts[b.id].filter((sym, i) => i >= 1 && (sym === '休' || sym === '希')).length
+        return bHols - aHols
+      })
+
+    if (rescuable.length > 0) {
+      // 公休余裕あり → 変換後も基準値以上なので補填不要
+      shifts[rescuable[0].id][d] = '日'
+    } else {
+      // 全員が基準値ちょうど or 「休」スロットなし → 確保不可能
+      violations.push({
+        type: 'critical',
+        rule: dayInfo.isSunday ? 'R3' : 'R2',
+        message: `${dayInfo.label}: この条件では日勤を確保できません（スタッフの希望休・前月情報を見直してください）`
       })
     }
   }
