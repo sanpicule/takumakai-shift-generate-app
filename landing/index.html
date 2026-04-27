@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src https://api.github.com" />
+  <title>看護シフト生成 ダウンロード</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="hero">
+    <div class="container">
+      <p class="eyebrow">卓麻会 看護師シフト生成アプリ</p>
+      <h1>看護シフト生成</h1>
+      <p class="tagline">病棟の月間シフト表を、希望休と施設ルールに沿って自動作成します。</p>
+
+      <div class="download-card">
+        <p class="version-label">最新バージョン：<span id="version">取得中...</span></p>
+        <a id="download-btn" class="download-btn" href="https://github.com/sanpicule/takumakai-shift-generate-app/releases/latest" target="_blank" rel="noopener">
+          <span class="os-icon" aria-hidden="true">⊞</span>
+          Windows版をダウンロード
+          <span class="size" id="size"></span>
+        </a>
+        <p class="sub-note">対応OS：Windows 10 / Windows 11（64bit）</p>
+        <p class="fallback" id="fallback" hidden>
+          自動取得に失敗した場合は、<a href="https://github.com/sanpicule/takumakai-shift-generate-app/releases/latest" target="_blank" rel="noopener">こちらのリリースページ</a>から手動でダウンロードしてください。
+        </p>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="container">
+      <h2>かんたん3ステップ</h2>
+      <ol class="steps">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <h3>ダウンロード</h3>
+            <p>上の「Windows版をダウンロード」ボタンを押し、インストーラー（<code>.exe</code>）を保存します。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <h3>インストール</h3>
+            <p>ダウンロードしたファイルをダブルクリックします。<br>
+              「Windows によって PC が保護されました」と表示されたら、<strong>「詳細情報」→「実行」</strong>の順にクリックしてください。</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <h3>起動</h3>
+            <p>インストール完了後、デスクトップの「看護シフト生成」アイコンをダブルクリックして起動します。</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section class="container alert-section">
+      <div class="alert">
+        <h3>セキュリティ警告について</h3>
+        <p>本アプリは院内利用のために配布されているもので、<strong>安全にご利用いただけます</strong>。Windows のセキュリティ警告は、開発元証明書のついていないアプリで一般的に表示されるものです。詳細手順書をあわせてご参照ください。</p>
+      </div>
+    </section>
+
+    <section class="container">
+      <h2>動作環境</h2>
+      <table class="env-table">
+        <tbody>
+          <tr><th>対応OS</th><td>Windows 10 / Windows 11（64bit）</td></tr>
+          <tr><th>必要空き容量</th><td>500 MB 以上</td></tr>
+          <tr><th>権限</th><td>インストール時に管理者権限が必要</td></tr>
+          <tr><th>ネットワーク</th><td>ダウンロード時のみ必要（起動時は不要）</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="container">
+      <h2>関連資料・お問い合わせ</h2>
+      <ul class="links">
+        <li><a href="https://github.com/sanpicule/takumakai-shift-generate-app/releases" target="_blank" rel="noopener">過去バージョンの一覧</a></li>
+        <li>詳細インストール手順書（PDF）：別途配布資料をご参照ください</li>
+        <li>お問い合わせ：院内システム担当までご連絡ください</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>&copy; 卓麻会 看護シフト生成</p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
