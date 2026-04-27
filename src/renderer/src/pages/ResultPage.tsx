@@ -5,15 +5,14 @@ import { generateCSV, generateMarkdownTable } from '../engine/generator'
 import type { ShiftSymbol } from '../types'
 import clsx from 'clsx'
 
-// シフト記号 → 表示スタイル
+// シフト記号 → 表示スタイル（「希」は「休」と同じスタイルで表示）
 function shiftCellClass(symbol: ShiftSymbol, isSunday: boolean, isSaturday: boolean): string {
   const base = 'text-center text-xs font-semibold py-1.5 px-0.5 rounded min-w-[28px]'
   if (symbol === '日') return clsx(base, 'bg-blue-100 text-blue-800')
   if (symbol === '当') return clsx(base, 'bg-pink-100 text-pink-800')
   if (symbol === '明') return clsx(base, 'bg-slate-100 text-slate-500')
-  if (symbol === '休') return clsx(base, 'bg-green-100 text-green-700')
+  if (symbol === '休' || symbol === '希') return clsx(base, 'bg-green-100 text-green-700')
   if (symbol === '代') return clsx(base, 'bg-yellow-100 text-yellow-700')
-  if (symbol === '希') return clsx(base, 'bg-purple-100 text-purple-700')
   if (symbol === '') {
     if (isSunday) return clsx(base, 'bg-red-50 text-red-200')
     if (isSaturday) return clsx(base, 'bg-blue-50 text-blue-200')
@@ -22,17 +21,19 @@ function shiftCellClass(symbol: ShiftSymbol, isSunday: boolean, isSaturday: bool
   return clsx(base, 'bg-white text-slate-400')
 }
 
+// 「希」は公休として「休」と同じ表示にする
 function shiftDisplayText(symbol: ShiftSymbol): string {
-  return symbol === '' ? '―' : symbol
+  if (symbol === '') return '―'
+  if (symbol === '希') return '休'
+  return symbol
 }
 
 const LEGEND = [
   { symbol: '日', label: '日勤', color: 'bg-blue-100 text-blue-800' },
   { symbol: '当', label: '当直', color: 'bg-pink-100 text-pink-800' },
   { symbol: '明', label: '明け', color: 'bg-slate-100 text-slate-500' },
-  { symbol: '休', label: '公休', color: 'bg-green-100 text-green-700' },
+  { symbol: '休', label: '公休（希望休含む）', color: 'bg-green-100 text-green-700' },
   { symbol: '代', label: '代休', color: 'bg-yellow-100 text-yellow-700' },
-  { symbol: '希', label: '希望休', color: 'bg-purple-100 text-purple-700' },
   { symbol: '―', label: '空欄', color: 'bg-white text-slate-300 border border-slate-100' }
 ] as const
 

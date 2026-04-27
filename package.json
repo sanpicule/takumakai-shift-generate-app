@@ -1,6 +1,6 @@
 {
   "name": "shift-scheduler",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "卓麻会 看護師シフト生成アプリ",
   "main": "./out/main/index.js",
   "author": "Takumaki-kai",
