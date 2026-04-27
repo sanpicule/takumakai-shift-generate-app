@@ -1,6 +1,10 @@
 node_modules
 dist
-build
+build/*
+# ビルドリソース（アイコン・設定ファイル）はgit管理する
+!build/icon.icns
+!build/icon.png
+!build/entitlements.mac.plist
 .env
 .env.local
 .env.development.local

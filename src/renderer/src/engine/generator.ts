@@ -656,6 +656,28 @@ export function generateShift(input: ShiftInput): ShiftResult {
     }
   }
 
+  // ===== STEP 11: 代休数の上限チェック =====
+  // 代休権利数 = 前月繰越 + 土曜当直数 + 日曜当直数 + 日曜日勤数
+  for (const staff of staffList) {
+    if (staff.isPartTime) continue
+    const summary = summaries.find((s) => s.staffId === staff.id)!
+    let entitled = prevMonthInfo.carryOverCompDays[staff.id] || 0
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dayInfo = dayInfos[d - 1]
+      const s = shifts[staff.id][d]
+      if (dayInfo.isSaturday && s === '当') entitled++
+      if (dayInfo.isSunday && s === '当') entitled++
+      if (dayInfo.isSunday && s === '日') entitled++
+    }
+    if (summary.compDayCount > entitled) {
+      violations.push({
+        type: 'warning',
+        rule: 'R11',
+        message: `${staff.name}: 代休数${summary.compDayCount}日が権利数${entitled}日を超えています`
+      })
+    }
+  }
+
   return {
     shifts,
     dayInfos,
@@ -689,7 +711,10 @@ export function generateCSV(result: ShiftResult, staffList: Staff[]): string {
     const summary = summaries.find((s) => s.staffId === staff.id)
     const row = [
       staff.name,
-      ...Array.from({ length: daysInMonth }, (_, i) => shifts[staff.id][i + 1] || ''),
+      ...Array.from({ length: daysInMonth }, (_, i) => {
+        const s = shifts[staff.id][i + 1] || ''
+        return s === '希' ? '休' : s
+      }),
       String(summary?.holidayCount ?? ''),
       String(summary?.compDayCount ?? ''),
       String(summary?.dayShiftCount ?? ''),
@@ -767,7 +792,10 @@ export function generateMarkdownTable(result: ShiftResult, staffList: Staff[]): 
     const summary = summaries.find((s) => s.staffId === staff.id)
     const cells = [
       staff.name,
-      ...Array.from({ length: daysInMonth }, (_, i) => shifts[staff.id][i + 1] || '　'),
+      ...Array.from({ length: daysInMonth }, (_, i) => {
+        const s = shifts[staff.id][i + 1] || '　'
+        return s === '希' ? '休' : s
+      }),
       String(summary?.holidayCount ?? ''),
       String(summary?.compDayCount ?? ''),
       String(summary?.dayShiftCount ?? ''),
