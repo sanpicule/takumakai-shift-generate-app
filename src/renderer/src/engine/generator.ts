@@ -89,6 +89,9 @@ export function canDoNightShift(
 ): boolean {
   const arr = shifts[staffId]
 
+  // 非常勤はSTEP 1で指定した日のみ当直可能（それ以外は不可）
+  if (staff.isPartTime) return false
+
   if (arr[day] !== '' && arr[day] !== '休') return false
   if (day >= 2 && arr[day - 1] === '当') return false
   if (day + 1 <= daysInMonth && arr[day + 1] === '希') return false
@@ -234,14 +237,21 @@ export function generateShift(input: ShiftInput): ShiftResult {
         return emptyAfter >= holsNeeded
       })
       .map((s) => {
-        const isWeekend = dayInfos[d - 1].isSaturday || dayInfos[d - 1].isSunday
+        // 翌日(明け)が土曜なら日当両方スタッフが日勤を1名失うためBを強く優先
+        const nextDayInfo = d < daysInMonth ? dayInfos[d] : null
+        const nextDayIsSat = nextDayInfo?.isSaturday ?? false
+        const nextDayIsSun = nextDayInfo?.isSunday ?? false
         return {
           staff: s,
           score:
             recentNightCount(shifts, s.id, d, 14) * 10 +
+            // 当直専従は連続サイクル許容のため基本優先（空きスロットを積極活用）
+            (s.workType === '当直専従' ? -15 : 0) +
             (s.isPartTime ? 100 : 0) +
-            // 土日は日当両方に当直を避けてBを優先（日勤カバレッジ確保）
-            (isWeekend && s.workType === '日当両方' ? 50 : 0)
+            // 翌日（明け）が土曜：日当両方に重いペナルティ（日勤2名確保が崩れる）
+            (nextDayIsSat && s.workType === '日当両方' ? 300 : 0) +
+            // 翌日（明け）が日曜：軽めのペナルティ（日勤1名必要）
+            (nextDayIsSun && s.workType === '日当両方' ? 50 : 0)
         }
       })
       .sort((a, b) => a.score - b.score)
@@ -750,6 +760,65 @@ export function generateShift(input: ShiftInput): ShiftResult {
     year,
     month
   }
+}
+
+// 集計を再計算する（手動編集後などに使用）
+export function calcSummaries(
+  staffList: Staff[],
+  shifts: MonthlyShifts,
+  dayInfos: DayInfo[]
+): StaffSummary[] {
+  const daysInMonth = dayInfos.length
+  return staffList.map((staff) => {
+    const arr = shifts[staff.id]
+    let holidayCount = 0
+    let compDayCount = 0
+    let dayShiftCount = 0
+    let nightShiftCount = 0
+    let sundayRestCount = 0
+    let maxConsec = 0
+    let currentConsec = 0
+    let consecutiveRestCount = 0
+    let restStreak = 0
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const s = arr[d]
+      const dayInfo = dayInfos[d - 1]
+
+      if (s === '休' || s === '希') holidayCount++
+      if (s === '代') compDayCount++
+      if (s === '日') dayShiftCount++
+      if (s === '当') nightShiftCount++
+      if (dayInfo.isSunday && (s === '休' || s === '代' || s === '希' || s === '明')) {
+        sundayRestCount++
+      }
+      if (s === '日' || s === '当') {
+        currentConsec++
+        maxConsec = Math.max(maxConsec, currentConsec)
+      } else {
+        currentConsec = 0
+      }
+
+      if (s === '休' || s === '代' || s === '希' || s === '明') {
+        restStreak++
+      } else {
+        if (restStreak >= 2) consecutiveRestCount++
+        restStreak = 0
+      }
+    }
+    if (restStreak >= 2) consecutiveRestCount++
+
+    return {
+      staffId: staff.id,
+      holidayCount,
+      compDayCount,
+      dayShiftCount,
+      nightShiftCount,
+      sundayRestCount,
+      maxConsecutiveDays: maxConsec,
+      consecutiveRestCount
+    }
+  })
 }
 
 // CSV出力用テキスト生成

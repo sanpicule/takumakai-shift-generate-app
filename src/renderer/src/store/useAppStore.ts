@@ -6,8 +6,11 @@ import type {
   PartTimeWorkDays,
   PrevMonthInfo,
   ShiftResult,
-  WorkType
+  SavedShift,
+  WorkType,
+  ShiftSymbol
 } from '../types'
+import { calcSummaries } from '../engine/generator'
 
 // デフォルトスタッフ（卓麻会の標準構成）
 const DEFAULT_STAFF: Staff[] = [
@@ -35,16 +38,20 @@ interface AppStore {
   selectedMonth: number
   setSelectedMonth: (year: number, month: number) => void
 
-  // 希望休（staffId → 日付リスト）
+  // 希望休（staffId → 日付リスト）：選択中の月のみ
   requests: StaffRequests
   setRequest: (staffId: string, days: number[]) => void
   toggleRequestDay: (staffId: string, day: number) => void
   clearRequests: () => void
 
-  // 非常勤指定日（staffId → 日付リスト）
+  // 非常勤指定日（staffId → 日付リスト）：選択中の月のみ
   partTimeWorkDays: PartTimeWorkDays
   setPartTimeWorkDays: (staffId: string, days: number[]) => void
   togglePartTimeDay: (staffId: string, day: number) => void
+
+  // 月別の希望休・非常勤指定日（`${year}-${month}` をキーとした永続化用）
+  allRequests: Record<string, StaffRequests>
+  allPartTimeWorkDays: Record<string, PartTimeWorkDays>
 
   // 前月情報
   prevMonthInfo: PrevMonthInfo
@@ -53,12 +60,19 @@ interface AppStore {
   // 生成結果
   shiftResult: ShiftResult | null
   setShiftResult: (result: ShiftResult | null) => void
+  updateShiftCell: (staffId: string, day: number, symbol: ShiftSymbol) => void
 
   // スタッフ構成プリセット
   staffPresets: StaffPreset[]
   savePreset: (name: string) => Promise<void>
   loadPreset: (id: string) => Promise<void>
   deletePreset: (id: string) => Promise<void>
+
+  // 保存済みシフト
+  savedShifts: SavedShift[]
+  saveCurrentShift: () => Promise<void>
+  deleteSavedShift: (id: string) => Promise<void>
+  loadSavedShift: (savedShift: SavedShift) => void
 
   // データの永続化
   loadFromStore: () => Promise<void>
@@ -68,10 +82,13 @@ interface AppStore {
 export const useAppStore = create<AppStore>((set, get) => ({
   staffList: DEFAULT_STAFF,
   staffPresets: [],
+  savedShifts: [],
   selectedYear: now.getFullYear(),
   selectedMonth: now.getMonth() + 1,
   requests: {},
   partTimeWorkDays: {},
+  allRequests: {},
+  allPartTimeWorkDays: {},
   prevMonthInfo: {
     lastOnCallStaffId: '',
     carryOverCompDays: {}
@@ -100,37 +117,109 @@ export const useAppStore = create<AppStore>((set, get) => ({
     })),
 
   setSelectedMonth: (year, month) => {
-    set({ selectedYear: year, selectedMonth: month, shiftResult: null })
+    // 月が切り替わったら、その月専用の希望休・非常勤指定日をロード
+    const { allRequests, allPartTimeWorkDays } = get()
+    const key = `${year}-${month}`
+    set({
+      selectedYear: year,
+      selectedMonth: month,
+      shiftResult: null,
+      requests: allRequests[key] ?? {},
+      partTimeWorkDays: allPartTimeWorkDays[key] ?? {}
+    })
   },
 
-  setRequest: (staffId, days) =>
-    set((state) => ({ requests: { ...state.requests, [staffId]: days } })),
+  setRequest: (staffId, days) => {
+    const { selectedYear, selectedMonth } = get()
+    const key = `${selectedYear}-${selectedMonth}`
+    set((state) => {
+      const newRequests = { ...state.requests, [staffId]: days }
+      return { requests: newRequests, allRequests: { ...state.allRequests, [key]: newRequests } }
+    })
+    try { window.api.storeSet('allRequests', get().allRequests).catch(() => {}) } catch {}
+  },
 
-  toggleRequestDay: (staffId, day) =>
+  toggleRequestDay: (staffId, day) => {
+    const { selectedYear, selectedMonth } = get()
+    const key = `${selectedYear}-${selectedMonth}`
     set((state) => {
       const current = state.requests[staffId] || []
       const updated = current.includes(day) ? current.filter((d) => d !== day) : [...current, day].sort((a, b) => a - b)
-      return { requests: { ...state.requests, [staffId]: updated } }
-    }),
+      const newRequests = { ...state.requests, [staffId]: updated }
+      return { requests: newRequests, allRequests: { ...state.allRequests, [key]: newRequests } }
+    })
+    try { window.api.storeSet('allRequests', get().allRequests).catch(() => {}) } catch {}
+  },
 
-  clearRequests: () => set({ requests: {} }),
+  clearRequests: () => {
+    const { selectedYear, selectedMonth } = get()
+    const key = `${selectedYear}-${selectedMonth}`
+    set((state) => ({ requests: {}, allRequests: { ...state.allRequests, [key]: {} } }))
+    try { window.api.storeSet('allRequests', get().allRequests).catch(() => {}) } catch {}
+  },
 
-  setPartTimeWorkDays: (staffId, days) =>
-    set((state) => ({ partTimeWorkDays: { ...state.partTimeWorkDays, [staffId]: days } })),
+  setPartTimeWorkDays: (staffId, days) => {
+    const { selectedYear, selectedMonth } = get()
+    const key = `${selectedYear}-${selectedMonth}`
+    set((state) => {
+      const newPTW = { ...state.partTimeWorkDays, [staffId]: days }
+      return { partTimeWorkDays: newPTW, allPartTimeWorkDays: { ...state.allPartTimeWorkDays, [key]: newPTW } }
+    })
+    try { window.api.storeSet('allPartTimeWorkDays', get().allPartTimeWorkDays).catch(() => {}) } catch {}
+  },
 
-  togglePartTimeDay: (staffId, day) =>
+  togglePartTimeDay: (staffId, day) => {
+    const { selectedYear, selectedMonth } = get()
+    const key = `${selectedYear}-${selectedMonth}`
     set((state) => {
       const current = state.partTimeWorkDays[staffId] || []
       const updated = current.includes(day)
         ? current.filter((d) => d !== day)
         : [...current, day].sort((a, b) => a - b)
-      return { partTimeWorkDays: { ...state.partTimeWorkDays, [staffId]: updated } }
-    }),
+      const newPTW = { ...state.partTimeWorkDays, [staffId]: updated }
+      return { partTimeWorkDays: newPTW, allPartTimeWorkDays: { ...state.allPartTimeWorkDays, [key]: newPTW } }
+    })
+    try { window.api.storeSet('allPartTimeWorkDays', get().allPartTimeWorkDays).catch(() => {}) } catch {}
+  },
 
   setPrevMonthInfo: (info) =>
     set((state) => ({ prevMonthInfo: { ...state.prevMonthInfo, ...info } })),
 
   setShiftResult: (result) => set({ shiftResult: result }),
+
+  updateShiftCell: (staffId, day, symbol) => {
+    set((state) => {
+      if (!state.shiftResult) return state
+      const oldShifts = state.shiftResult.shifts
+      const arr = [...oldShifts[staffId]] as ShiftSymbol[]
+      const prevSymbol = arr[day]
+
+      arr[day] = symbol
+
+      // 当直 → 翌日を明に自動設定
+      if (symbol === '当' && day < arr.length - 1) {
+        arr[day + 1] = '明'
+      }
+      // 当直を別のものに変更 → 翌日の明をクリア
+      if (prevSymbol === '当' && symbol !== '当' && day < arr.length - 1) {
+        if (arr[day + 1] === '明') arr[day + 1] = ''
+      }
+
+      const newShifts = { ...oldShifts, [staffId]: arr }
+      const newSummaries = calcSummaries(
+        state.staffList,
+        newShifts,
+        state.shiftResult.dayInfos
+      )
+      return {
+        shiftResult: {
+          ...state.shiftResult,
+          shifts: newShifts,
+          summaries: newSummaries
+        }
+      }
+    })
+  },
 
   savePreset: async (name) => {
     try {
@@ -172,6 +261,44 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
   },
 
+  saveCurrentShift: async () => {
+    try {
+      const { shiftResult, staffList, savedShifts } = get()
+      if (!shiftResult) return
+      const newSaved: SavedShift = {
+        id: `shift_${Date.now()}`,
+        year: shiftResult.year,
+        month: shiftResult.month,
+        shiftResult,
+        staffList: [...staffList],
+        savedAt: new Date().toISOString()
+      }
+      const updated = [...savedShifts, newSaved]
+      set({ savedShifts: updated })
+      await window.api.storeSet('savedShifts', updated)
+    } catch {
+      // storeが利用できない場合は無視
+    }
+  },
+
+  deleteSavedShift: async (id) => {
+    try {
+      const { savedShifts } = get()
+      const updated = savedShifts.filter((s) => s.id !== id)
+      set({ savedShifts: updated })
+      await window.api.storeSet('savedShifts', updated)
+    } catch {
+      // storeが利用できない場合は無視
+    }
+  },
+
+  loadSavedShift: (savedShift) => {
+    set({
+      shiftResult: savedShift.shiftResult,
+      staffList: savedShift.staffList
+    })
+  },
+
   loadFromStore: async () => {
     try {
       const api = window.api
@@ -182,6 +309,22 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const staffPresets = (await api.storeGet('staffPresets')) as StaffPreset[] | null
       if (staffPresets && staffPresets.length > 0) {
         set({ staffPresets })
+      }
+      const savedShifts = (await api.storeGet('savedShifts')) as SavedShift[] | null
+      if (savedShifts && savedShifts.length > 0) {
+        set({ savedShifts })
+      }
+      const allRequests = (await api.storeGet('allRequests')) as Record<string, StaffRequests> | null
+      if (allRequests) {
+        const { selectedYear, selectedMonth } = get()
+        const key = `${selectedYear}-${selectedMonth}`
+        set({ allRequests, requests: allRequests[key] ?? {} })
+      }
+      const allPartTimeWorkDays = (await api.storeGet('allPartTimeWorkDays')) as Record<string, PartTimeWorkDays> | null
+      if (allPartTimeWorkDays) {
+        const { selectedYear, selectedMonth } = get()
+        const key = `${selectedYear}-${selectedMonth}`
+        set({ allPartTimeWorkDays, partTimeWorkDays: allPartTimeWorkDays[key] ?? {} })
       }
     } catch {
       // storeが利用できない場合はデフォルト値を使用

@@ -8,6 +8,8 @@ declare global {
       storeSet: (key: string, value: unknown) => Promise<void>
       storeDelete: (key: string) => Promise<void>
       saveCsv: (content: string, defaultName: string) => Promise<{ success: boolean; error?: string }>
+      savePdfFromCanvas: (dataUrl: string, defaultName: string) => Promise<{ success: boolean; error?: string }>
+      savePng: (dataUrl: string, defaultName: string) => Promise<{ success: boolean; error?: string }>
     }
   }
 }

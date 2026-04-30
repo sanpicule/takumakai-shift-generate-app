@@ -5,20 +5,22 @@ import HomePage from './pages/HomePage'
 import StaffPage from './pages/StaffPage'
 import RequestPage from './pages/RequestPage'
 import ResultPage from './pages/ResultPage'
-
-const NAV_ITEMS = [
-  { path: '/', label: 'シフト生成', icon: '📅' },
-  { path: '/staff', label: 'スタッフ管理', icon: '👥' },
-  { path: '/requests', label: '希望休入力', icon: '📆' },
-  { path: '/result', label: 'シフト結果', icon: '📊' }
-]
+import SavedShiftsPage from './pages/SavedShiftsPage'
 
 function Sidebar() {
   const location = useLocation()
-  const { selectedYear, selectedMonth, shiftResult } = useAppStore()
+  const { selectedYear, selectedMonth, shiftResult, savedShifts } = useAppStore()
+
+  const navItems = [
+    { path: '/', label: 'シフト生成', icon: '📅' },
+    { path: '/staff', label: 'スタッフ管理', icon: '👥' },
+    { path: '/requests', label: '希望休入力', icon: '📆' },
+    { path: '/result', label: 'シフト結果', icon: '📊' },
+    { path: '/saved', label: '保存したシフト', icon: '🗂' }
+  ]
 
   return (
-    <aside className="w-56 bg-slate-900 flex flex-col h-full flex-shrink-0">
+    <aside className="w-56 bg-slate-900 flex flex-col h-full flex-shrink-0 print:hidden">
       {/* ヘッダー */}
       <div className="mt-12 px-5 py-5 titlebar-drag">
         <div className="flex items-center gap-2 mb-1">
@@ -40,13 +42,14 @@ function Sidebar() {
 
       {/* ナビゲーション */}
       <nav className="flex-1 px-2 space-y-1">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const isActive =
             item.path === '/'
               ? location.pathname === '/'
               : location.pathname.startsWith(item.path)
           const isResult = item.path === '/result'
           const hasResult = !!shiftResult
+          const isSaved = item.path === '/saved'
 
           return (
             <NavLink
@@ -64,6 +67,11 @@ function Sidebar() {
               <span>{item.label}</span>
               {isResult && hasResult && (
                 <span className="ml-auto w-2 h-2 bg-green-400 rounded-full" />
+              )}
+              {isSaved && savedShifts.length > 0 && (
+                <span className="ml-auto text-xs bg-purple-500 text-white px-1.5 py-0.5 rounded-full font-medium min-w-[20px] text-center">
+                  {savedShifts.length}
+                </span>
               )}
             </NavLink>
           )
@@ -115,6 +123,7 @@ export default function App() {
           <Route path="/staff" element={<StaffPage />} />
           <Route path="/requests" element={<RequestPage />} />
           <Route path="/result" element={<ResultPage />} />
+          <Route path="/saved" element={<SavedShiftsPage />} />
         </Routes>
       </Layout>
     </HashRouter>

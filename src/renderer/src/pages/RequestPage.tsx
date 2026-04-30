@@ -152,11 +152,12 @@ const STAFF_COLORS = [
   'bg-rose-500'
 ]
 
-// 編集可能な月（来月）を計算する
-function getEditableMonth(): { year: number; month: number } {
+// 来月以降かどうかを判定する
+function isFutureMonth(year: number, month: number): boolean {
   const today = new Date()
-  const d = new Date(today.getFullYear(), today.getMonth() + 1, 1)
-  return { year: d.getFullYear(), month: d.getMonth() + 1 }
+  const currentYear = today.getFullYear()
+  const currentMonth = today.getMonth() + 1
+  return year > currentYear || (year === currentYear && month > currentMonth)
 }
 
 export default function RequestPage() {
@@ -171,9 +172,8 @@ export default function RequestPage() {
     togglePartTimeDay
   } = useAppStore()
 
-  // 来月のみ編集可
-  const editable = getEditableMonth()
-  const isEditable = selectedYear === editable.year && selectedMonth === editable.month
+  // 来月以降は編集可
+  const isEditable = isFutureMonth(selectedYear, selectedMonth)
 
   // 前月・翌月への移動（月をまたぐ場合は年も更新）
   const goToPrevMonth = () => {
@@ -222,7 +222,7 @@ export default function RequestPage() {
             </button>
             {isEditable
               ? <span className="text-slate-400 text-sm">— カレンダーの日付をタップして選択します</span>
-              : <span className="bg-slate-100 text-slate-500 text-xs px-2.5 py-1 rounded-full font-medium">閲覧のみ（編集は来月のみ）</span>
+              : <span className="bg-slate-100 text-slate-500 text-xs px-2.5 py-1 rounded-full font-medium">閲覧のみ（編集は来月以降）</span>
             }
           </div>
         </div>

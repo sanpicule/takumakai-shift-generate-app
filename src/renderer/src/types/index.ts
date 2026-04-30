@@ -91,6 +91,16 @@ export interface StaffPreset {
   createdAt: string // ISO 8601
 }
 
+// 保存済みシフト
+export interface SavedShift {
+  id: string
+  year: number
+  month: number
+  shiftResult: ShiftResult
+  staffList: Staff[]
+  savedAt: string // ISO 8601
+}
+
 // アプリ全体の設定・状態
 export interface AppState {
   // スタッフ一覧

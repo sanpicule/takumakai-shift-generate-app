@@ -153,9 +153,9 @@ describe('canDoNightShift', () => {
     expect(canDoNightShift(shifts, 'C', 5, staffBoth, daysInMonth)).toBe(true)
   })
 
-  it('非常勤は当直可', () => {
+  it('非常勤はcanDoNightShiftでは当直不可（STEP 1で指定日のみ配置済みのため）', () => {
     const shifts = makeEmptyShifts(['G'], daysInMonth)
-    expect(canDoNightShift(shifts, 'G', 5, staffPartTime, daysInMonth)).toBe(true)
+    expect(canDoNightShift(shifts, 'G', 5, staffPartTime, daysInMonth)).toBe(false)
   })
 
   it('既に希望休の日は当直不可', () => {

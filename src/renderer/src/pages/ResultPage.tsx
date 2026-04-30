@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
-import { generateCSV, generateMarkdownTable } from '../engine/generator'
+import { generateCSV } from '../engine/generator'
 import type { ShiftSymbol } from '../types'
 import clsx from 'clsx'
+import { generateShiftImage } from '../engine/canvasExport'
 
 // シフト記号 → 表示スタイル（「希」は「休」と同じスタイルで表示）
 function shiftCellClass(symbol: ShiftSymbol, isSunday: boolean, isSaturday: boolean): string {
@@ -37,10 +38,71 @@ const LEGEND = [
   { symbol: '―', label: '空欄', color: 'bg-white text-slate-300 border border-slate-100' }
 ] as const
 
+// セル編集ポップアップの選択肢
+const EDIT_OPTIONS: { symbol: ShiftSymbol; label: string; color: string }[] = [
+  { symbol: '日', label: '日勤', color: 'bg-blue-100 text-blue-800 hover:bg-blue-200' },
+  { symbol: '当', label: '当直', color: 'bg-pink-100 text-pink-800 hover:bg-pink-200' },
+  { symbol: '休', label: '公休', color: 'bg-green-100 text-green-700 hover:bg-green-200' },
+  { symbol: '代', label: '代休', color: 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' },
+  { symbol: '', label: '空欄', color: 'bg-slate-100 text-slate-500 hover:bg-slate-200' }
+]
+
 export default function ResultPage() {
   const navigate = useNavigate()
-  const { shiftResult, staffList } = useAppStore()
+  const { shiftResult, staffList, saveCurrentShift, updateShiftCell } = useAppStore()
   const [copyMsg, setCopyMsg] = useState('')
+  const [isSaved, setIsSaved] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+
+  // セル編集状態（クリック位置も保持してfixed配置）
+  const [editingCell, setEditingCell] = useState<{
+    staffId: string
+    day: number
+    x: number
+    y: number
+  } | null>(null)
+
+  // ポップアップ外クリックで閉じる
+  useEffect(() => {
+    if (!editingCell) return
+    const handler = () => setEditingCell(null)
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [editingCell])
+
+  function handleCellClick(e: React.MouseEvent, staffId: string, day: number, symbol: ShiftSymbol) {
+    if (symbol === '明') return // 明は編集不可
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setEditingCell({ staffId, day, x: rect.left, y: rect.bottom })
+  }
+
+  function handleSelectSymbol(symbol: ShiftSymbol) {
+    if (!editingCell) return
+    updateShiftCell(editingCell.staffId, editingCell.day, symbol)
+    setIsSaved(false) // 編集後は未保存状態に戻す
+    setEditingCell(null)
+  }
+
+  // シフト表を Canvas で描画して base64 PNG を生成（DOM 依存なし・スクロール不問）
+  function buildDataUrl(): string {
+    return generateShiftImage(shiftResult!, staffList)
+  }
+
+  // 画像（PNG）として保存
+  async function handleShareAsImage() {
+    setIsExporting(true)
+    try {
+      const dataUrl = buildDataUrl()
+      const filename = `シフト_${shiftResult!.year}年${shiftResult!.month}月.png`
+      const result = await window.api.savePng(dataUrl, filename)
+      setCopyMsg(result.success ? '画像を保存しました（LINEに添付できます）' : '保存がキャンセルされました')
+    } catch (e) {
+      console.error('画像保存エラー:', e)
+      setCopyMsg('画像の保存に失敗しました')
+    }
+    setIsExporting(false)
+    setTimeout(() => setCopyMsg(''), 4000)
+  }
 
   if (!shiftResult) {
     return (
@@ -64,6 +126,14 @@ export default function ResultPage() {
 
   const warningViolations = violations.filter((v) => v.type === 'warning')
   const infoViolations = violations.filter((v) => v.type === 'info')
+
+  // シフトをアプリ内に保存
+  async function handleSaveShift() {
+    await saveCurrentShift()
+    setIsSaved(true)
+    setCopyMsg('シフトを保存しました')
+    setTimeout(() => setCopyMsg(''), 3000)
+  }
 
   // CSV保存
   async function handleSaveCSV() {
@@ -90,23 +160,6 @@ export default function ResultPage() {
     setTimeout(() => setCopyMsg(''), 3000)
   }
 
-  // マークダウンをクリップボードにコピー
-  async function handleCopyMarkdown() {
-    const md = generateMarkdownTable(shiftResult!, staffList)
-    await navigator.clipboard.writeText(md)
-    setCopyMsg('マークダウンをコピーしました')
-    setTimeout(() => setCopyMsg(''), 3000)
-  }
-
-  // TSVをクリップボードにコピー（Googleスプレッドシートに貼り付けやすい形式）
-  async function handleCopyTSV() {
-    const csv = generateCSV(shiftResult!, staffList)
-    const tsv = csv.split('\n').map(row => row.split(',').join('\t')).join('\n')
-    await navigator.clipboard.writeText(tsv)
-    setCopyMsg('スプレッドシート用データをコピーしました（貼り付けるだけでOK）')
-    setTimeout(() => setCopyMsg(''), 4000)
-  }
-
   // フッター行（日勤人数合計・当直担当者）
   const dayShiftStaff = staffList.filter(
     (s) => s.workType === '日勤専従' || s.workType === '日当両方'
@@ -118,7 +171,7 @@ export default function ResultPage() {
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
       {/* 上部ツールバー */}
-      <div className="bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between flex-shrink-0">
+      <div className="bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between flex-shrink-0 print:hidden">
         <div>
           <h1 className="text-lg font-bold text-slate-800">
             {year}年{month}月 シフト表
@@ -140,11 +193,12 @@ export default function ResultPage() {
             </span>
           )}
           <button
-            onClick={handleCopyTSV}
-            className="bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-2 rounded-lg font-medium transition-colors flex items-center gap-1.5"
-            title="スプレッドシートに貼り付け可能な形式でコピー"
+            onClick={handleSaveShift}
+            disabled={isSaved}
+            className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white text-sm px-3 py-2 rounded-lg font-medium transition-colors flex items-center gap-1.5"
+            title="このシフトをアプリ内に保存します"
           >
-            📋 スプレッドシートにコピー
+            {isSaved ? '✓ 保存済み' : '🗂 シフトを保存'}
           </button>
           <button
             onClick={handleSaveCSV}
@@ -152,12 +206,16 @@ export default function ResultPage() {
           >
             💾 CSV保存
           </button>
+
+          {/* 画像保存ボタン */}
           <button
-            onClick={handleCopyMarkdown}
-            className="bg-slate-600 hover:bg-slate-700 text-white text-sm px-3 py-2 rounded-lg font-medium transition-colors flex items-center gap-1.5"
+            onClick={handleShareAsImage}
+            disabled={isExporting}
+            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-sm px-3 py-2 rounded-lg font-medium transition-colors flex items-center gap-1.5"
           >
-            📄 MD形式コピー
+            {isExporting ? '⏳ 処理中...' : '🖼 画像で保存'}
           </button>
+
           <button
             onClick={() => navigate('/')}
             className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm px-3 py-2 rounded-lg font-medium transition-colors"
@@ -240,9 +298,18 @@ export default function ResultPage() {
                     {/* シフトセル */}
                     {dayInfos.map((d) => {
                       const symbol = shifts[staff.id]?.[d.date] ?? ''
+                      const isEditing = editingCell?.staffId === staff.id && editingCell?.day === d.date
+                      const isAke = symbol === '明'
                       return (
                         <td key={d.date} className="px-0.5 py-1">
-                          <div className={shiftCellClass(symbol, d.isSunday, d.isSaturday)}>
+                          <div
+                            className={clsx(
+                              shiftCellClass(symbol, d.isSunday, d.isSaturday),
+                              !isAke && 'cursor-pointer hover:ring-2 hover:ring-offset-0 hover:ring-blue-400',
+                              isEditing && 'ring-2 ring-blue-500'
+                            )}
+                            onClick={(e) => handleCellClick(e, staff.id, d.date, symbol)}
+                          >
                             {shiftDisplayText(symbol)}
                           </div>
                         </td>
@@ -325,8 +392,44 @@ export default function ResultPage() {
         </div>
       </div>
 
+      {/* セル編集ポップアップ（fixed配置でスクロールに影響されない） */}
+      {editingCell && (() => {
+        // 編集対象以外のスタッフがその日すでに当直に入っているか
+        const dayAlreadyHasOnCall = staffList.some(
+          (s) => s.id !== editingCell.staffId && shifts[s.id]?.[editingCell.day] === '当'
+        )
+        return (
+          <div
+            style={{ position: 'fixed', top: editingCell.y + 4, left: editingCell.x, zIndex: 9999 }}
+            className="bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 flex gap-1"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {EDIT_OPTIONS.map(({ symbol, label, color }) => {
+              const isOnCallDisabled = symbol === '当' && dayAlreadyHasOnCall
+              return (
+                <button
+                  key={symbol || 'clear'}
+                  disabled={isOnCallDisabled}
+                  onClick={() => handleSelectSymbol(symbol)}
+                  title={isOnCallDisabled ? 'この日は既に当直が割り当て済みです' : undefined}
+                  className={clsx(
+                    'text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors',
+                    isOnCallDisabled
+                      ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                      : color
+                  )}
+                >
+                  {symbol || '―'}
+                  <span className="ml-1 text-[10px] opacity-70">{label}</span>
+                </button>
+              )
+            })}
+          </div>
+        )
+      })()}
+
       {/* 凡例フッター */}
-      <div className="bg-white border-t border-slate-200 px-5 py-2 flex items-center gap-4 flex-shrink-0">
+      <div className="bg-white border-t border-slate-200 px-5 py-2 flex items-center gap-4 flex-shrink-0 print:hidden">
         <span className="text-xs text-slate-500 font-medium">凡例:</span>
         <div className="flex gap-2 flex-wrap">
           {LEGEND.map(({ symbol, label, color }) => (
